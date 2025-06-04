@@ -1,0 +1,175 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Reddit Story Generator</title>
+    <link rel="stylesheet" href="styles.css">
+    <link href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.0.0/css/all.min.css" rel="stylesheet">
+    <script type="importmap">
+    {
+        "imports": {
+            "RedditStoryGenerator": "./js/RedditStoryGenerator.js"
+        }
+    }
+    </script>
+</head>
+<body>
+    <div class="reddit-container">
+        <!-- Header -->
+        <header class="reddit-header">
+            <div class="header-content">
+                <div class="logo">
+                    <i class="fab fa-reddit"></i>
+                    <span>StoryGen</span>
+                </div>
+                <div class="theme-toggle">
+                    <button id="themeToggle"><i class="fas fa-moon"></i></button>
+                </div>
+            </div>
+        </header>
+
+        <!-- Main Content -->
+        <div class="main-content">
+            <div class="story-generator">
+                <!-- Subreddit Selection -->
+                <div class="subreddit-selector">
+                    <h3>Choose Your Subreddit</h3>
+                    <div class="subreddit-grid">
+                        <button class="subreddit-btn active" data-subreddit="tifu">r/tifu</button>
+                        <button class="subreddit-btn" data-subreddit="nosleep">r/nosleep</button>
+                        <button class="subreddit-btn" data-subreddit="relationships">r/relationships</button>
+                        <button class="subreddit-btn" data-subreddit="aita">r/AmItheAsshole</button>
+                        <button class="subreddit-btn" data-subreddit="maliciouscompliance">r/MaliciousCompliance</button>
+                        <button class="subreddit-btn" data-subreddit="entitledparents">r/EntitledParents</button>
+                        <button class="subreddit-btn" data-subreddit="letsnotmeet">r/LetsNotMeet</button>
+                        <button class="subreddit-btn" data-subreddit="pettyrevenge">r/pettyrevenge</button>
+                        <button class="subreddit-btn" data-subreddit="revenge">r/revenge</button>
+                    </div>
+                </div>
+
+                <!-- Story Input -->
+                <div class="story-input-section">
+                    <h3>Describe Your Story</h3>
+                    <textarea id="storyPrompt" placeholder="Tell me what your story should be about... Be creative!"></textarea>
+                </div>
+
+                <!-- Controls -->
+                <div class="controls-grid">
+                    <div class="control-group">
+                        <label for="storyLength">Story Length</label>
+                        <input type="range" id="storyLength" min="1" max="10" value="3">
+                        <div class="range-labels">
+                            <span>Short</span>
+                            <span>Medium</span>
+                            <span>Long</span>
+                            <span>Very Long</span>
+                            <span>Epic</span>
+                            <span>Novella</span>
+                            <span>Novel</span>
+                            <span>Saga</span>
+                            <span>Masterpiece</span>
+                            <span>Hour-Long</span>
+                        </div>
+                    </div>
+
+                    <div class="control-group">
+                        <label for="descriptiveness">Descriptiveness Level</label>
+                        <input type="range" id="descriptiveness" min="1" max="5" value="3">
+                        <div class="range-labels">
+                            <span>Straight to Point</span>
+                            <span>Some Details</span>
+                            <span>Balanced</span>
+                            <span>Very Descriptive</span>
+                            <span>Over-the-Top</span>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- TTS Controls -->
+                <div class="tts-controls">
+                    <h3>Text-to-Speech Settings</h3>
+                    <div class="tts-grid">
+                        <div class="control-group">
+                            <label for="voiceSelect">Voice</label>
+                            <select id="voiceSelect">
+                                <option value="en-male">English Male</option>
+                                <option value="en-female">English Female</option>
+                                <option value="es-male">Spanish Male</option>
+                                <option value="es-female">Spanish Female</option>
+                                <option value="fr-male">French Male</option>
+                                <option value="fr-female">French Female</option>
+                                <option value="de-male">German Male</option>
+                                <option value="de-female">German Female</option>
+                            </select>
+                        </div>
+
+                        <div class="control-group">
+                            <label for="pitchControl">Pitch</label>
+                            <input type="range" id="pitchControl" min="0.5" max="2" step="0.1" value="1">
+                            <span class="value-display" id="pitchValue">1.0</span>
+                        </div>
+
+                        <div class="control-group">
+                            <label for="speedControl">Speed</label>
+                            <input type="range" id="speedControl" min="0.5" max="2" step="0.1" value="1">
+                            <span class="value-display" id="speedValue">1.0</span>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- Generate Button -->
+                <button id="generateBtn" class="generate-btn">
+                    <i class="fas fa-magic"></i>
+                    Generate Reddit Story
+                </button>
+
+                <!-- Loading -->
+                <div id="loadingSection" class="loading-section" style="display: none;">
+                    <div class="loading-spinner"></div>
+                    <p>Generating your epic Reddit story...</p>
+                </div>
+
+                <!-- Story Display -->
+                <div id="storyDisplay" class="story-display" style="display: none;">
+                    <div class="story-header">
+                        <div class="upvotes">
+                            <i class="fas fa-arrow-up"></i>
+                            <span id="upvoteCount">1.2k</span>
+                            <i class="fas fa-arrow-down"></i>
+                        </div>
+                        <div class="story-meta">
+                            <h2 id="storyTitle"></h2>
+                            <p class="story-info">
+                                <span>Posted by u/AIStoryteller</span>
+                                <span>•</span>
+                                <span>2 hours ago</span>
+                                <span id="subredditDisplay"></span>
+                            </p>
+                        </div>
+                    </div>
+                    <div class="story-content" id="storyContent"></div>
+                    
+                    <!-- Audio Controls -->
+                    <div class="audio-controls">
+                        <button id="playStoryBtn" class="audio-btn">
+                            <i class="fas fa-play"></i>
+                            Play Story
+                        </button>
+                        <button id="downloadAudioBtn" class="audio-btn" style="display: none;">
+                            <i class="fas fa-download"></i>
+                            Download Audio
+                        </button>
+                        <div class="audio-progress" style="display: none;">
+                            <div class="progress-bar"></div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <script type="module" src="script.js"></script>
+<script defer src="https://static.cloudflareinsights.com/beacon.min.js/v8c78df7c7c0f484497ecbca7046644da1771523124516" integrity="sha512-8DS7rgIrAmghBFwoOTujcf6D9rXvH8xm8JQ1Ja01h9QX8EzXldiszufYa4IFfKdLUKTTrnSFXLDkUEOTrZQ8Qg==" data-cf-beacon='{"version":"2024.11.0","token":"4c6229722a6346bc8eb5cb0e5eae5d41","server_timing":{"name":{"cfCacheStatus":true,"cfEdge":true,"cfExtPri":true,"cfL4":true,"cfOrigin":true,"cfSpeedBrain":true},"location_startswith":null}}' crossorigin="anonymous"></script>
+</body>
+</html>
