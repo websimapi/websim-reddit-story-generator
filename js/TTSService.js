@@ -124,7 +124,6 @@ export default class TTSService {
     
     // Create audio element with better initialization
     const audio = new Audio();
-    audio.crossOrigin = 'anonymous';
     audio.preload = 'metadata'; // Changed from 'auto' to 'metadata' for faster loading
     
     // Set playback rate first
@@ -139,6 +138,10 @@ export default class TTSService {
         this.playNextChunk();
       } else {
         console.error('All audio chunks failed to load');
+        // Only throw error if we're on the last chunk and it fails
+        if (this.currentAudioIndex === this.currentAudioUrls.length - 1) {
+          throw new Error('Failed to load audio');
+        }
       }
     });
     
