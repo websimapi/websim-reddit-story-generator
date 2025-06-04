@@ -51,6 +51,37 @@ export default class StoryService {
 13. End this part in a way that naturally leads to continuation.`;
   }
 
+  async generateChatCompletionWithRetry(messages, attempt = 1) {
+    const maxAttempts = 3;
+    if (!messages || !Array.isArray(messages) || messages.length === 0) {
+        throw new Error('Invalid messages input for chat completion');
+    }
+
+    // Chat completion can take longer, especially for story generation
+    const baseTimeout = 45000; // 45 seconds base
+    const timeoutMs = baseTimeout + ((attempt - 1) * 15000); // 45s, 60s, 75s
+
+    return new Promise((resolve, reject) => {
+        const timeoutId = setTimeout(() => {
+            reject(new Error(`Chat completion timeout after ${timeoutMs/1000}s (attempt ${attempt})`));
+        }, timeoutMs);
+
+        websim.chat.completions.create({ messages })
+            .then(response => {
+                clearTimeout(timeoutId);
+                if (response && response.content) {
+                    resolve(response);
+                } else {
+                    reject(new Error('Invalid chat completion response - no content returned'));
+                }
+            })
+            .catch(error => {
+                clearTimeout(timeoutId);
+                reject(new Error(`Chat completion API error: ${error.message || 'Unknown error'}`));
+            });
+    });
+}
+
   async generateStory(premise, subreddit, lengthValue, descriptivenessValue) {
     const isMulti = lengthValue >= 6;
     const extra = lengthValue >= 9 ? 7 : 0;
@@ -67,12 +98,34 @@ export default class StoryService {
       const user = isFirst
         ? `Write a Reddit story based on this premise: ${premise}`
         : `Previous story so far: ${full}\n\nContinue the story seamlessly from where it left off. This is part ${i+1} of ${parts}. ${isLast ? 'Bring the story to a satisfying conclusion.' : 'Continue developing the plot and characters without ending the story yet.'}`;
-      const resp = await websim.chat.completions.create({
-        messages: [{ role: "system", content: sys }, { role: "user", content: user }]
-      });
-      full = isFirst ? resp.content : `${full}\n\n${resp.content}`;
-    }
+      
+      let success = false;
+      let attempts = 0;
+      const maxAttempts = 3; 
+      let respContent = '';
 
+      while (!success && attempts < maxAttempts) {
+        try {
+          attempts++;
+          console.log(`Generating story part ${i+1}/${parts} (attempt ${attempts}/${maxAttempts})`);
+          const resp = await this.generateChatCompletionWithRetry(
+            [{ role: "system", content: sys }, { role: "user", content: user }],
+            attempts
+          );
+          respContent = resp.content;
+          success = true;
+        } catch (err) {
+          console.error(`Error generating story part ${i+1}, attempt ${attempts}:`, err);
+          if (attempts >= maxAttempts) {
+            throw new Error(`Failed to generate story part ${i+1} after ${maxAttempts} attempts: ${err.message}`);
+          }
+          const delay = Math.min(1000 * Math.pow(2, attempts - 1), 5000); // Exponential backoff: 1s, 2s, 4s (max 5s)
+          console.log(`Retrying story part ${i+1} in ${delay}ms...`);
+          await new Promise(resolve => setTimeout(resolve, delay));
+        }
+      }
+      full = isFirst ? respContent : `${full}\n\n${respContent}`;
+    }
     return full;
   }
 }
