@@ -10,27 +10,50 @@ export default class TTSService {
     this.currentAudioIndex = 0;
   }
 
-  async generateAudioURLs(text, voice) {
+  async generateAudioURLs(text, voice, progressCallback) {
     const processed = preprocessTextForTTS(text);
     // Reduce TTS chunk size significantly for better API reliability
     const chunks = splitTextIntoChunks(processed, 500);
     const urls = [];
 
     for (let i = 0; i < chunks.length; i++) {
-      try {
-        console.log(`Generating TTS chunk ${i+1}/${chunks.length}`);
-        const res = await this.generateTTSWithTimeout(chunks[i], voice, 30000);
-        if (res && res.url && typeof res.url === 'string' && res.url.length > 0) {
-          urls.push(res.url);
-          console.log(`Successfully generated chunk ${i+1}`);
-        } else {
-          console.warn(`Chunk ${i+1} returned invalid response:`, res);
+      if (progressCallback) {
+        progressCallback(i, chunks.length);
+      }
+      
+      let success = false;
+      let attempts = 0;
+      const maxAttempts = 3;
+      
+      while (!success && attempts < maxAttempts) {
+        try {
+          attempts++;
+          console.log(`Generating TTS chunk ${i+1}/${chunks.length} (attempt ${attempts}/${maxAttempts})`);
+          const res = await this.generateTTSWithRetry(chunks[i], voice, attempts);
+          if (res && res.url && typeof res.url === 'string' && res.url.length > 0) {
+            urls.push(res.url);
+            console.log(`Successfully generated chunk ${i+1}`);
+            success = true;
+          } else {
+            throw new Error('Invalid response from TTS API');
+          }
+        } catch (err) {
+          console.error(`Error generating chunk ${i+1}, attempt ${attempts}:`, err);
+          if (attempts >= maxAttempts) {
+            throw new Error(`Failed to generate chunk ${i+1} after ${maxAttempts} attempts: ${err.message}`);
+          }
+          // Wait before retry with exponential backoff
+          const delay = Math.min(1000 * Math.pow(2, attempts - 1), 5000);
+          console.log(`Retrying chunk ${i+1} in ${delay}ms...`);
+          await new Promise(resolve => setTimeout(resolve, delay));
         }
-      } catch (err) {
-        console.error(`Error generating chunk ${i+1}:`, err);
-        // Continue with other chunks even if one fails
       }
     }
+    
+    if (progressCallback) {
+      progressCallback(chunks.length, chunks.length);
+    }
+    
     if (!urls.length) {
       throw new Error('Failed to generate any valid audio chunks');
     }
@@ -38,37 +61,43 @@ export default class TTSService {
     return urls;
   }
 
-  generateTTSWithTimeout(text, voice, timeoutMs = 30000) {
+  async generateTTSWithRetry(text, voice, attempt = 1) {
+    // Validate inputs before making the call
+    if (!text || typeof text !== 'string' || text.trim().length === 0) {
+      throw new Error('Invalid text input for TTS');
+    }
+    
+    if (!voice || typeof voice !== 'string') {
+      throw new Error('Invalid voice input for TTS');
+    }
+
+    // Increase timeout for subsequent attempts
+    const timeoutMs = 15000 + (attempt * 10000); // 15s, 25s, 35s
+    
     return new Promise((resolve, reject) => {
-      const to = setTimeout(() => reject(new Error('TTS generation timeout')), timeoutMs);
-      
-      // Validate inputs before making the call
-      if (!text || typeof text !== 'string' || text.trim().length === 0) {
-        clearTimeout(to);
-        reject(new Error('Invalid text input for TTS'));
-        return;
-      }
-      
-      if (!voice || typeof voice !== 'string') {
-        clearTimeout(to);
-        reject(new Error('Invalid voice input for TTS'));
-        return;
-      }
+      const timeout = setTimeout(() => {
+        reject(new Error(`TTS generation timeout after ${timeoutMs}ms (attempt ${attempt})`));
+      }, timeoutMs);
       
       websim.textToSpeech({ text: text.trim(), voice })
-        .then(r => { 
-          clearTimeout(to); 
-          if (r && r.url && typeof r.url === 'string' && r.url.length > 0) {
-            resolve(r);
+        .then(response => { 
+          clearTimeout(timeout);
+          if (response && response.url && typeof response.url === 'string' && response.url.length > 0) {
+            resolve(response);
           } else {
             reject(new Error('Invalid TTS response - no valid URL returned'));
           }
         })
-        .catch(e => { 
-          clearTimeout(to); 
-          reject(new Error(`TTS API error: ${e.message || 'Unknown error'}`));
+        .catch(error => { 
+          clearTimeout(timeout);
+          reject(new Error(`TTS API error: ${error.message || 'Unknown error'}`));
         });
     });
+  }
+
+  generateTTSWithTimeout(text, voice, timeoutMs = 30000) {
+    // Deprecated - use generateTTSWithRetry instead
+    return this.generateTTSWithRetry(text, voice, 1);
   }
 
   createAudioPlayer(urls, rate) {

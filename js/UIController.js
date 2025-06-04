@@ -113,7 +113,7 @@ export default class UIController {
     }
     
     this.elements.playStoryBtn.disabled = true;
-    this.elements.playStoryBtn.innerHTML = '<i class="fas fa-spinner fa-spin"></i> Generating Audio...';
+    this.elements.playStoryBtn.innerHTML = '<i class="fas fa-spinner fa-spin"></i> Preparing...';
     
     try {
       const text = this.elements.storyContent.textContent;
@@ -130,8 +130,17 @@ export default class UIController {
       }
       
       console.log('Starting TTS generation...');
-      const urls = await this.ttsService.generateAudioURLs(text, voice);
+      
+      // Progress callback to update UI
+      const progressCallback = (current, total) => {
+        const remaining = total - current;
+        this.elements.playStoryBtn.innerHTML = `<i class="fas fa-spinner fa-spin"></i> Generating... ${remaining} chunks left`;
+      };
+      
+      const urls = await this.ttsService.generateAudioURLs(text, voice, progressCallback);
       console.log('TTS generation completed, creating audio player...');
+      
+      this.elements.playStoryBtn.innerHTML = '<i class="fas fa-spinner fa-spin"></i> Loading Audio...';
       const audio = this.ttsService.createAudioPlayer(urls, rate);
       
       // Set a more reasonable loading timeout
