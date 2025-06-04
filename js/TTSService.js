@@ -72,7 +72,7 @@ export default class TTSService {
     }
 
     // Increase timeout for subsequent attempts
-    const timeoutMs = 15000 + (attempt * 10000); // 15s, 25s, 35s
+    const timeoutMs = 20000 + (attempt * 10000); // 20s, 30s, 40s
     
     return new Promise((resolve, reject) => {
       const timeout = setTimeout(() => {
@@ -124,23 +124,34 @@ export default class TTSService {
     
     // Create audio element with better initialization
     const audio = new Audio();
-    audio.preload = 'metadata'; // Changed from 'auto' to 'metadata' for faster loading
+    audio.preload = 'metadata';
     
     // Set playback rate first
     audio.playbackRate = rate || 1;
     
-    // Add comprehensive error handling
+    // Add comprehensive error handling with retry logic
     audio.addEventListener('error', (e) => {
       console.error('Audio loading error:', e, 'URL:', audio.src);
-      // Try next chunk if available
-      if (this.currentAudioIndex < this.currentAudioUrls.length - 1) {
-        console.log('Trying next audio chunk due to error...');
-        this.playNextChunk();
+      // Try to retry the same chunk once before moving to next
+      if (!audio.hasRetried) {
+        console.log('Retrying current audio chunk...');
+        audio.hasRetried = true;
+        setTimeout(() => {
+          try {
+            audio.load(); // Reload the same chunk
+          } catch (retryError) {
+            console.error('Retry failed, moving to next chunk:', retryError);
+            this.playNextChunk();
+          }
+        }, 1000);
       } else {
-        console.error('All audio chunks failed to load');
-        // Only throw error if we're on the last chunk and it fails
-        if (this.currentAudioIndex === this.currentAudioUrls.length - 1) {
-          throw new Error('Failed to load audio');
+        // Try next chunk if available
+        if (this.currentAudioIndex < this.currentAudioUrls.length - 1) {
+          console.log('Moving to next audio chunk due to error...');
+          this.playNextChunk();
+        } else {
+          console.error('All audio chunks failed to load');
+          // Don't throw error, just log it
         }
       }
     });
@@ -156,11 +167,38 @@ export default class TTSService {
   playNextChunk() {
     if (this.currentAudioUrls && this.currentAudioIndex < this.currentAudioUrls.length - 1) {
       this.currentAudioIndex++;
-      const next = new Audio(this.currentAudioUrls[this.currentAudioIndex]);
-      next.playbackRate = this.currentAudio.playbackRate;
-      next.addEventListener('ended', () => this.playNextChunk());
-      next.play().catch(err => console.error('Error playing next audio chunk:', err));
-      this.currentAudio = next;
+      
+      try {
+        const next = new Audio(this.currentAudioUrls[this.currentAudioIndex]);
+        next.playbackRate = this.currentAudio.playbackRate;
+        
+        // Add error handling for next chunk
+        next.addEventListener('error', (e) => {
+          console.error('Error loading next chunk:', e);
+          // Skip to following chunk if this one fails
+          if (this.currentAudioIndex < this.currentAudioUrls.length - 1) {
+            this.playNextChunk();
+          }
+        });
+        
+        next.addEventListener('ended', () => this.playNextChunk());
+        
+        next.play().catch(err => {
+          console.error('Error playing next audio chunk:', err);
+          // Try to continue with next chunk
+          if (this.currentAudioIndex < this.currentAudioUrls.length - 1) {
+            this.playNextChunk();
+          }
+        });
+        
+        this.currentAudio = next;
+      } catch (error) {
+        console.error('Error creating next audio chunk:', error);
+        // Try to continue with following chunk
+        if (this.currentAudioIndex < this.currentAudioUrls.length - 1) {
+          this.playNextChunk();
+        }
+      }
     }
   }
 
